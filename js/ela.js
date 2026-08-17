@@ -1,36 +1,36 @@
-/**
- * Error Level Analysis (ELA)
- * 
- * ELA identifies areas within an image that are at different compression levels.
- * With JPEG images, the entire picture should be at roughly the same level. If 
- * a section of the image is at a significantly different error level, then it 
- * likely indicates a digital modification.
- * 
- * The algorithm works by re-saving the image at a known quality (e.g. 75%),
- * and computing the absolute difference between the original and re-saved image.
- */
-window.performELA = function(sourceCanvas, resultCanvas, options) {
-    const defaultOptions = { quality: 75, scale: 15, heatmap: false };
-    const config = Object.assign({}, defaultOptions, options);
+/* ═══════════════════════════════════════════════
+   📐 DIP: ERROR LEVEL ANALYSIS (ELA)
+   Highlights differences between original and recompressed image to identify manipulated regions
+   ═══════════════════════════════════════════════ */
 
+window.performELA = function(sourceCanvas, resultCanvas, options) {
     return new Promise((resolve, reject) => {
+        const defaultOptions = { quality: 75, scale: 15, heatmap: false };
+        const opt = { ...defaultOptions, ...options };
+        
         const width = sourceCanvas.width;
         const height = sourceCanvas.height;
-
-        // Ensure resultCanvas has correct dimensions
+        
         resultCanvas.width = width;
         resultCanvas.height = height;
 
         const sourceCtx = sourceCanvas.getContext('2d');
+        const resultCtx = resultCanvas.getContext('2d');
         const originalImageData = sourceCtx.getImageData(0, 0, width, height);
 
-        // 1. Export as JPEG at the given quality
-        const jpegDataUrl = sourceCanvas.toDataURL('image/jpeg', config.quality / 100);
+        /* ═══════════════════════════════════════════════
+           📐 DIP: JPEG COMPRESSION / DCT
+           Export as JPEG to exploit DCT-based lossy compression.
+           ═══════════════════════════════════════════════ */
+        // Export to JPEG at specific quality setting to force DCT quantization error
+        const jpegDataUrl = sourceCanvas.toDataURL('image/jpeg', opt.quality / 100);
 
-        // 2. Load the re-compressed JPEG back
         const img = new Image();
-        img.onload = function() {
-            // Create a temp canvas to read the re-compressed image data
+        img.onload = () => {
+            /* ═══════════════════════════════════════════════
+               📐 DIP: IMAGE RESAMPLING
+               Load the re-compressed JPEG back into a temp canvas
+               ═══════════════════════════════════════════════ */
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = width;
             tempCanvas.height = height;
@@ -38,68 +38,56 @@ window.performELA = function(sourceCanvas, resultCanvas, options) {
             tempCtx.drawImage(img, 0, 0);
             const recompressedImageData = tempCtx.getImageData(0, 0, width, height);
 
-            const resultCtx = resultCanvas.getContext('2d');
             const resultImageData = resultCtx.createImageData(width, height);
+            
+            for (let i = 0; i < originalImageData.data.length; i += 4) {
+                /* ═══════════════════════════════════════════════
+                   📐 DIP: PIXEL-WISE DIFFERENCE / ERROR QUANTIZATION
+                   Compute absolute difference per channel
+                   ═══════════════════════════════════════════════ */
+                let diffR = Math.abs(originalImageData.data[i] - recompressedImageData.data[i]);
+                let diffG = Math.abs(originalImageData.data[i + 1] - recompressedImageData.data[i + 1]);
+                let diffB = Math.abs(originalImageData.data[i + 2] - recompressedImageData.data[i + 2]);
 
-            const origData = originalImageData.data;
-            const recompData = recompressedImageData.data;
-            const resData = resultImageData.data;
+                /* ═══════════════════════════════════════════════
+                   📐 DIP: CONTRAST STRETCHING / AMPLIFICATION
+                   Multiply difference by scale factor and clamp to [0, 255]
+                   ═══════════════════════════════════════════════ */
+                diffR = Math.min(255, Math.floor(diffR * opt.scale));
+                diffG = Math.min(255, Math.floor(diffG * opt.scale));
+                diffB = Math.min(255, Math.floor(diffB * opt.scale));
 
-            // Helper function for Heatmap colorization
-            // Blue -> Green -> Yellow -> Red
-            function valueToHeatmap(val) {
-                let r = 0, g = 0, b = 0;
-                let v = Math.min(255, Math.max(0, val)) / 255;
-                if (v < 0.25) {
-                    // Blue to Cyan
-                    b = 255;
-                    g = Math.round(v * 4 * 255);
-                } else if (v < 0.5) {
-                    // Cyan to Green
-                    g = 255;
-                    b = Math.round((0.5 - v) * 4 * 255);
-                } else if (v < 0.75) {
-                    // Green to Yellow
-                    g = 255;
-                    r = Math.round((v - 0.5) * 4 * 255);
+                if (opt.heatmap) {
+                    /* ═══════════════════════════════════════════════
+                       📐 DIP: PSEUDOCOLOR MAPPING / HEATMAP
+                       Convert grayscale intensity to a heatmap color
+                       ═══════════════════════════════════════════════ */
+                    const intensity = (diffR + diffG + diffB) / 3;
+                    const normalized = intensity / 255;
+                    
+                    // Simple heatmap: blue -> cyan -> green -> yellow -> red
+                    let r = 0, g = 0, b = 0;
+                    if (normalized < 0.25) {
+                        r = 0; g = Math.floor(normalized * 4 * 255); b = 255;
+                    } else if (normalized < 0.5) {
+                        r = 0; g = 255; b = Math.floor((1 - (normalized - 0.25) * 4) * 255);
+                    } else if (normalized < 0.75) {
+                        r = Math.floor((normalized - 0.5) * 4 * 255); g = 255; b = 0;
+                    } else {
+                        r = 255; g = Math.floor((1 - (normalized - 0.75) * 4) * 255); b = 0;
+                    }
+                    
+                    resultImageData.data[i] = r;
+                    resultImageData.data[i + 1] = g;
+                    resultImageData.data[i + 2] = b;
                 } else {
-                    // Yellow to Red
-                    r = 255;
-                    g = Math.round((1.0 - v) * 4 * 255);
+                    resultImageData.data[i] = diffR;
+                    resultImageData.data[i + 1] = diffG;
+                    resultImageData.data[i + 2] = diffB;
                 }
-                return [r, g, b];
+                resultImageData.data[i + 3] = 255; // Alpha channel
             }
 
-            // 3. Compute absolute difference, apply scale and output
-            for (let i = 0; i < origData.length; i += 4) {
-                // Compute differences for R, G, B channels
-                let diffR = Math.abs(origData[i] - recompData[i]);
-                let diffG = Math.abs(origData[i + 1] - recompData[i + 1]);
-                let diffB = Math.abs(origData[i + 2] - recompData[i + 2]);
-
-                // Scale the error
-                let scaledR = Math.min(255, diffR * config.scale);
-                let scaledG = Math.min(255, diffG * config.scale);
-                let scaledB = Math.min(255, diffB * config.scale);
-
-                if (config.heatmap) {
-                    // Use luminance of the scaled difference to determine heatmap intensity
-                    let intensity = 0.299 * scaledR + 0.587 * scaledG + 0.114 * scaledB;
-                    let heatmapColor = valueToHeatmap(intensity);
-                    resData[i] = heatmapColor[0];
-                    resData[i + 1] = heatmapColor[1];
-                    resData[i + 2] = heatmapColor[2];
-                } else {
-                    resData[i] = scaledR;
-                    resData[i + 1] = scaledG;
-                    resData[i + 2] = scaledB;
-                }
-                
-                // Alpha channel is fully opaque
-                resData[i + 3] = 255; 
-            }
-
-            // 4. Draw the result
             resultCtx.putImageData(resultImageData, 0, 0);
             resolve();
         };

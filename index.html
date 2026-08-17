@@ -1,9 +1,9 @@
 <!--
-    ForensicLens — Digital Image Forensics Toolkit
-    A client-side web app for image tampering detection & analysis.
+    ForensicLens v2 — Digital Image Forensics Toolkit + Privacy Guard
+    A client-side web app for image tampering detection, analysis & privacy protection.
     
-    Tools: ELA | Noise Analysis | Copy-Move Detection | Metadata | Channel Analysis | Edge Detection
-    Stack: HTML5 + CSS3 + Vanilla JS (Canvas API)
+    Tools: ELA | Noise Analysis | Copy-Move Detection | Channel Analysis | Edge Detection | Privacy Guard
+    Stack: HTML5 + CSS3 + Vanilla JS (Canvas API) + Leaflet.js
     License: MIT
 -->
 <!DOCTYPE html>
@@ -13,326 +13,309 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ForensicLens — Digital Image Forensics Toolkit</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔬</text></svg>">
-    <meta name="description" content="Analyze images for tampering, forgery, and manipulation using advanced digital image processing techniques including ELA, noise analysis, and copy-move detection.">
+    <meta name="description" content="Analyze images for tampering, forgery, and manipulation using advanced digital image processing techniques. Includes privacy guard to strip hidden metadata.">
+
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Leaflet CSS (for Privacy Guard map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- App CSS -->
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <!-- ========== NAVBAR ========== -->
-    <nav class="navbar">
-        <div class="navbar-brand">
-            <i class="fas fa-microscope"></i>
-            <span>Forensic<span class="accent">Lens</span></span>
-        </div>
-        <div class="navbar-info">
-            <span class="badge">DIP Lab Project</span>
-            <span class="navbar-sep">|</span>
-            <span class="navbar-text">Digital Image Processing</span>
-        </div>
-    </nav>
+    <!-- Ambient Background -->
+    <div class="ambient-bg">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+    </div>
 
-    <!-- ========== HERO / UPLOAD SECTION ========== -->
-    <section id="upload-section" class="upload-section">
-        <div class="upload-hero">
-            <div class="hero-glow"></div>
-            <h1>Image Forensics Toolkit</h1>
-            <p class="hero-subtitle">Analyze images for tampering, forgery &amp; manipulation using advanced DIP techniques</p>
-            
-            <div id="drop-zone" class="drop-zone">
-                <div class="drop-zone-content">
-                    <div class="drop-icon">
-                        <i class="fas fa-cloud-arrow-up"></i>
-                    </div>
-                    <h3>Drop your image here</h3>
-                    <p>or click to browse</p>
-                    <span class="drop-formats">Supports JPEG, PNG, WebP, BMP</span>
+    <main class="app-wrapper">
+
+        <!-- ===== UPLOAD SCREEN ===== -->
+        <section id="upload-screen" class="screen active">
+            <header class="app-header">
+                <div class="logo">
+                    <i class="fa-solid fa-microscope"></i>
+                    <h1>ForensicLens</h1>
                 </div>
-                <input type="file" id="file-input" accept="image/*" hidden>
+                <p class="tagline">Digital Image Forensics Toolkit</p>
+            </header>
+
+            <div class="drop-zone" id="drop-zone">
+                <div class="drop-zone-inner">
+                    <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                    <h2>Drag & Drop an Image</h2>
+                    <p class="drop-hint">or click to browse &middot; Supports JPEG, PNG, WebP</p>
+                    <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/bmp" hidden>
+                </div>
             </div>
 
-            <!-- Feature Cards -->
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <i class="fas fa-layer-group"></i>
-                    <h4>ELA</h4>
-                    <p>Error Level Analysis</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-wave-square"></i>
-                    <h4>Noise</h4>
-                    <p>Noise Pattern Analysis</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-clone"></i>
-                    <h4>Copy-Move</h4>
-                    <p>Forgery Detection</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-tags"></i>
-                    <h4>Metadata</h4>
-                    <p>EXIF Extraction</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-palette"></i>
-                    <h4>Channels</h4>
-                    <p>RGB/HSL Splitting</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-border-all"></i>
-                    <h4>Edges</h4>
-                    <p>Gradient Detection</p>
-                </div>
+            <div class="trust-bar">
+                <span><i class="fa-solid fa-lock"></i> 100% Client-Side &middot; Your images never leave your device</span>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- ========== ANALYSIS SECTION ========== -->
-    <section id="analysis-section" class="analysis-section" style="display: none;">
+        <!-- ===== ANALYSIS SCREEN ===== -->
+        <section id="analysis-screen" class="screen">
 
-        <!-- Top Bar: Image info + Change image -->
-        <div class="analysis-topbar">
-            <div class="image-info">
-                <i class="fas fa-image"></i>
-                <span id="image-name">image.jpg</span>
-                <span class="image-meta" id="image-dimensions">—</span>
-                <span class="image-meta" id="image-size">—</span>
-            </div>
-            <div class="topbar-actions">
-                <button id="change-image-btn" class="btn btn-ghost">
-                    <i class="fas fa-rotate"></i> Change Image
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <button class="btn btn-ghost" id="btn-change-image">
+                    <i class="fa-solid fa-arrow-left"></i> Change Image
                 </button>
-                <button id="export-btn" class="btn btn-accent" disabled>
-                    <i class="fas fa-download"></i> Export Result
+                <div class="image-info-bar">
+                    <span id="info-name" class="info-chip"><i class="fa-regular fa-image"></i> —</span>
+                    <span id="info-dims" class="info-chip"><i class="fa-solid fa-expand"></i> —</span>
+                    <span id="info-size" class="info-chip"><i class="fa-solid fa-weight-hanging"></i> —</span>
+                </div>
+            </div>
+
+            <!-- Tool Tabs -->
+            <nav class="tool-tabs" id="tool-tabs">
+                <button class="tool-tab active" data-tool="ela">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <span>ELA</span>
                 </button>
+                <button class="tool-tab" data-tool="noise">
+                    <i class="fa-solid fa-wave-square"></i>
+                    <span>Noise</span>
+                </button>
+                <button class="tool-tab" data-tool="copymove">
+                    <i class="fa-solid fa-clone"></i>
+                    <span>Copy-Move</span>
+                </button>
+                <button class="tool-tab" data-tool="channels">
+                    <i class="fa-solid fa-palette"></i>
+                    <span>Channels</span>
+                </button>
+                <button class="tool-tab" data-tool="edges">
+                    <i class="fa-solid fa-border-all"></i>
+                    <span>Edges</span>
+                </button>
+                <button class="tool-tab" data-tool="privacy">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span>Privacy Guard</span>
+                </button>
+            </nav>
+
+            <!-- Main Content Area -->
+            <div class="main-content">
+
+                <!-- Left: Canvas Area (for tools 1-5) -->
+                <div class="canvas-area" id="canvas-area">
+                    <div class="canvas-panel">
+                        <div class="canvas-label">Original Image</div>
+                        <canvas id="original-canvas"></canvas>
+                    </div>
+                    <div class="canvas-panel">
+                        <div class="canvas-label" id="result-label">Analysis Result</div>
+                        <canvas id="result-canvas"></canvas>
+                        <div class="processing-overlay" id="processing-overlay">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i>
+                            <span>Processing...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Privacy Guard Area (for tool 6) -->
+                <div class="privacy-area" id="privacy-area" style="display:none;">
+                    <div class="privacy-grid">
+                        <!-- Left: Image + Metadata -->
+                        <div class="priv-col">
+                            <div class="panel priv-image-panel">
+                                <img id="priv-preview" src="" alt="Preview">
+                                <div id="priv-status" class="priv-status priv-status-warning">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <span id="priv-status-text">Scanning...</span>
+                                </div>
+                            </div>
+                            <div class="panel priv-data-panel">
+                                <h3><i class="fa-solid fa-list-check"></i> Extracted Hidden Data</h3>
+                                <div id="priv-metadata" class="meta-list"></div>
+                                <div id="priv-no-data" class="empty-msg" style="display:none;">
+                                    <i class="fa-solid fa-circle-check"></i>
+                                    <p>No metadata found. This image is already safe to share.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Right: Map + Actions -->
+                        <div class="priv-col">
+                            <div class="panel priv-map-panel" id="priv-map-panel">
+                                <h3><i class="fa-solid fa-location-dot"></i> GPS Location Leak <span class="pulse-dot" id="pulse-dot"></span></h3>
+                                <div id="leaflet-map" class="leaflet-map-container"></div>
+                                <div id="map-no-gps" class="map-no-gps">
+                                    <i class="fa-solid fa-map-location-dot"></i>
+                                    <p>No GPS data found in this image.</p>
+                                </div>
+                            </div>
+                            <div class="panel priv-action-panel">
+                                <h3><i class="fa-solid fa-broom"></i> Privacy Scrubber</h3>
+                                <p class="action-desc">Strip all hidden metadata (GPS, camera info, timestamps) from this image so it's safe to share online.</p>
+                                <button id="btn-scrub" class="btn btn-danger btn-large">
+                                    <i class="fa-solid fa-eraser"></i> Scrub My Photo
+                                </button>
+                                <div id="scrub-done" class="scrub-done" style="display:none;">
+                                    <i class="fa-solid fa-shield-check"></i>
+                                    <h4>All Metadata Removed!</h4>
+                                    <p>Your photo is now safe to share.</p>
+                                    <a id="btn-download-safe" class="btn btn-success" download>
+                                        <i class="fa-solid fa-download"></i> Download Safe Photo
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar: Controls -->
+                <aside class="controls-sidebar" id="controls-sidebar">
+
+                    <!-- Tool Description -->
+                    <div class="tool-description">
+                        <h3 id="tool-title">Error Level Analysis</h3>
+                        <p id="tool-desc">Re-compresses the image and highlights differences. Tampered regions appear brighter.</p>
+                    </div>
+
+                    <!-- ELA Controls -->
+                    <div class="tool-controls active" id="ela-controls">
+                        <div class="control-group">
+                            <label>JPEG Quality <span id="ela-quality-val">75%</span></label>
+                            <input type="range" id="ela-quality" min="5" max="99" value="75">
+                        </div>
+                        <div class="control-group">
+                            <label>Amplification <span id="ela-scale-val">15×</span></label>
+                            <input type="range" id="ela-scale" min="1" max="80" value="15">
+                        </div>
+                        <div class="control-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="ela-heatmap"> Heatmap Mode
+                            </label>
+                        </div>
+                        <button class="btn btn-primary btn-run" data-tool="ela"><i class="fa-solid fa-play"></i> Run ELA</button>
+                    </div>
+
+                    <!-- Noise Controls -->
+                    <div class="tool-controls" id="noise-controls">
+                        <div class="control-group">
+                            <label>Blur Kernel <span id="noise-radius-val">3</span></label>
+                            <input type="range" id="noise-radius" min="1" max="15" value="3" step="2">
+                        </div>
+                        <div class="control-group">
+                            <label>Amplification <span id="noise-amp-val">10×</span></label>
+                            <input type="range" id="noise-amp" min="1" max="40" value="10">
+                        </div>
+                        <div class="control-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="noise-invert"> Invert
+                            </label>
+                        </div>
+                        <button class="btn btn-primary btn-run" data-tool="noise"><i class="fa-solid fa-play"></i> Run Noise Analysis</button>
+                    </div>
+
+                    <!-- Copy-Move Controls -->
+                    <div class="tool-controls" id="copymove-controls">
+                        <div class="control-group">
+                            <label>Block Size <span id="cm-block-val">16px</span></label>
+                            <input type="range" id="cm-block" min="8" max="48" value="16" step="4">
+                        </div>
+                        <div class="control-group">
+                            <label>Threshold <span id="cm-thresh-val">8</span></label>
+                            <input type="range" id="cm-thresh" min="1" max="40" value="8">
+                        </div>
+                        <div class="control-group">
+                            <label>Min Distance <span id="cm-mindist-val">5</span></label>
+                            <input type="range" id="cm-mindist" min="2" max="20" value="5">
+                        </div>
+                        <button class="btn btn-primary btn-run" data-tool="copymove"><i class="fa-solid fa-play"></i> Run Detection</button>
+                    </div>
+
+                    <!-- Channel Controls -->
+                    <div class="tool-controls" id="channels-controls">
+                        <div class="control-group">
+                            <label>Channel</label>
+                            <select id="channel-select">
+                                <option value="red">Red</option>
+                                <option value="green">Green</option>
+                                <option value="blue">Blue</option>
+                                <option value="luminance">Luminance</option>
+                                <option value="hue">Hue</option>
+                                <option value="saturation">Saturation</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="channel-color" checked> Show in Color
+                            </label>
+                        </div>
+                        <button class="btn btn-primary btn-run" data-tool="channels"><i class="fa-solid fa-play"></i> Run Channel Analysis</button>
+                    </div>
+
+                    <!-- Edge Controls -->
+                    <div class="tool-controls" id="edges-controls">
+                        <div class="control-group">
+                            <label>Method</label>
+                            <select id="edge-method">
+                                <option value="sobel">Sobel</option>
+                                <option value="laplacian">Laplacian</option>
+                                <option value="prewitt">Prewitt</option>
+                                <option value="roberts">Roberts Cross</option>
+                                <option value="scharr">Scharr</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Threshold <span id="edge-thresh-val">30</span></label>
+                            <input type="range" id="edge-thresh" min="0" max="255" value="30">
+                        </div>
+                        <div class="control-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="edge-overlay"> Overlay on Original
+                            </label>
+                        </div>
+                        <button class="btn btn-primary btn-run" data-tool="edges"><i class="fa-solid fa-play"></i> Run Edge Detection</button>
+                    </div>
+
+                    <!-- Privacy Guard Controls (minimal — shown in sidebar) -->
+                    <div class="tool-controls" id="privacy-controls">
+                        <p class="sidebar-note">The Privacy Guard analyzes your image's hidden EXIF metadata and GPS coordinates. Use the panels on the left to view the extracted data and scrub it clean.</p>
+                    </div>
+
+                    <!-- Histogram (for DIP tools) -->
+                    <div class="histogram-box" id="histogram-box">
+                        <h4><i class="fa-solid fa-chart-bar"></i> Histogram</h4>
+                        <canvas id="histogram-canvas" width="256" height="100"></canvas>
+                    </div>
+
+                    <!-- Export -->
+                    <button class="btn btn-ghost btn-export" id="btn-export" disabled>
+                        <i class="fa-solid fa-download"></i> Export Result as PNG
+                    </button>
+                </aside>
             </div>
-        </div>
+        </section>
+    </main>
 
-        <!-- Tool Tabs -->
-        <div class="tool-tabs">
-            <button class="tool-tab active" data-tool="ela">
-                <i class="fas fa-layer-group"></i>
-                <span>ELA</span>
-            </button>
-            <button class="tool-tab" data-tool="noise">
-                <i class="fas fa-wave-square"></i>
-                <span>Noise</span>
-            </button>
-            <button class="tool-tab" data-tool="copymove">
-                <i class="fas fa-clone"></i>
-                <span>Copy-Move</span>
-            </button>
-            <button class="tool-tab" data-tool="metadata">
-                <i class="fas fa-tags"></i>
-                <span>Metadata</span>
-            </button>
-            <button class="tool-tab" data-tool="channels">
-                <i class="fas fa-palette"></i>
-                <span>Channels</span>
-            </button>
-            <button class="tool-tab" data-tool="edges">
-                <i class="fas fa-border-all"></i>
-                <span>Edges</span>
-            </button>
-        </div>
+    <!-- Hidden scrub canvas -->
+    <canvas id="scrub-canvas" style="display:none;"></canvas>
 
-        <!-- Main Analysis Area -->
-        <div class="analysis-body">
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-            <!-- Canvas Area -->
-            <div class="canvas-area">
-                <div class="canvas-panel" id="original-panel">
-                    <div class="panel-label">Original</div>
-                    <canvas id="original-canvas"></canvas>
-                </div>
-                <div class="canvas-panel" id="result-panel">
-                    <div class="panel-label" id="result-label">ELA Result</div>
-                    <canvas id="result-canvas"></canvas>
-                </div>
-            </div>
-
-            <!-- Controls Sidebar -->
-            <div class="controls-sidebar">
-
-                <!-- Tool Description -->
-                <div class="control-card" id="tool-description">
-                    <h3 id="tool-title">Error Level Analysis</h3>
-                    <p id="tool-desc">Re-compresses the image and highlights differences. Tampered regions show brighter areas due to different compression histories.</p>
-                </div>
-
-                <!-- ELA Controls -->
-                <div class="control-card tool-controls active" id="ela-controls">
-                    <div class="control-group">
-                        <label>JPEG Quality</label>
-                        <div class="slider-row">
-                            <input type="range" id="ela-quality" min="5" max="99" value="75" class="slider">
-                            <span class="slider-val" id="ela-quality-val">75%</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Error Amplification</label>
-                        <div class="slider-row">
-                            <input type="range" id="ela-scale" min="1" max="80" value="15" class="slider">
-                            <span class="slider-val" id="ela-scale-val">15×</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="ela-heatmap"> Heatmap Colorization
-                        </label>
-                    </div>
-                    <button class="btn btn-primary btn-run" data-tool="ela">
-                        <i class="fas fa-play"></i> Run ELA
-                    </button>
-                </div>
-
-                <!-- Noise Controls -->
-                <div class="control-card tool-controls" id="noise-controls">
-                    <div class="control-group">
-                        <label>Blur Kernel Size</label>
-                        <div class="slider-row">
-                            <input type="range" id="noise-radius" min="1" max="15" value="3" step="2" class="slider">
-                            <span class="slider-val" id="noise-radius-val">3</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Noise Amplification</label>
-                        <div class="slider-row">
-                            <input type="range" id="noise-amp" min="1" max="40" value="10" class="slider">
-                            <span class="slider-val" id="noise-amp-val">10×</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="noise-invert"> Invert Output
-                        </label>
-                    </div>
-                    <button class="btn btn-primary btn-run" data-tool="noise">
-                        <i class="fas fa-play"></i> Run Noise Analysis
-                    </button>
-                </div>
-
-                <!-- Copy-Move Controls -->
-                <div class="control-card tool-controls" id="copymove-controls">
-                    <div class="control-group">
-                        <label>Block Size</label>
-                        <div class="slider-row">
-                            <input type="range" id="cm-block" min="8" max="48" value="16" step="4" class="slider">
-                            <span class="slider-val" id="cm-block-val">16px</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Similarity Threshold</label>
-                        <div class="slider-row">
-                            <input type="range" id="cm-thresh" min="1" max="40" value="8" class="slider">
-                            <span class="slider-val" id="cm-thresh-val">8</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Min Distance (blocks)</label>
-                        <div class="slider-row">
-                            <input type="range" id="cm-mindist" min="2" max="20" value="5" class="slider">
-                            <span class="slider-val" id="cm-mindist-val">5</span>
-                        </div>
-                    </div>
-                    <button class="btn btn-primary btn-run" data-tool="copymove">
-                        <i class="fas fa-play"></i> Detect Copy-Move
-                    </button>
-                </div>
-
-                <!-- Metadata Display -->
-                <div class="control-card tool-controls" id="metadata-controls">
-                    <div id="metadata-output" class="metadata-output">
-                        <p class="meta-placeholder">Upload an image to extract metadata...</p>
-                    </div>
-                </div>
-
-                <!-- Channel Controls -->
-                <div class="control-card tool-controls" id="channels-controls">
-                    <div class="control-group">
-                        <label>Channel</label>
-                        <select id="channel-select" class="select-input">
-                            <option value="red">Red Channel</option>
-                            <option value="green">Green Channel</option>
-                            <option value="blue">Blue Channel</option>
-                            <option value="luminance">Luminance (Grayscale)</option>
-                            <option value="hue">Hue</option>
-                            <option value="saturation">Saturation</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="channel-color" checked> Show in color
-                        </label>
-                    </div>
-                    <button class="btn btn-primary btn-run" data-tool="channels">
-                        <i class="fas fa-play"></i> Extract Channel
-                    </button>
-                </div>
-
-                <!-- Edge Controls -->
-                <div class="control-card tool-controls" id="edges-controls">
-                    <div class="control-group">
-                        <label>Detection Method</label>
-                        <select id="edge-method" class="select-input">
-                            <option value="sobel">Sobel Operator</option>
-                            <option value="laplacian">Laplacian</option>
-                            <option value="prewitt">Prewitt Operator</option>
-                            <option value="roberts">Roberts Cross</option>
-                            <option value="scharr">Scharr Operator</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label>Threshold</label>
-                        <div class="slider-row">
-                            <input type="range" id="edge-thresh" min="0" max="255" value="30" class="slider">
-                            <span class="slider-val" id="edge-thresh-val">30</span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="edge-overlay"> Overlay on original
-                        </label>
-                    </div>
-                    <button class="btn btn-primary btn-run" data-tool="edges">
-                        <i class="fas fa-play"></i> Detect Edges
-                    </button>
-                </div>
-
-                <!-- Processing indicator -->
-                <div class="processing-indicator" id="processing-indicator" style="display:none;">
-                    <div class="spinner"></div>
-                    <span>Processing...</span>
-                </div>
-
-                <!-- Histogram -->
-                <div class="control-card" id="histogram-card">
-                    <h3>Histogram</h3>
-                    <canvas id="histogram-canvas" width="280" height="140"></canvas>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ========== FOOTER ========== -->
-    <footer class="footer">
-        <div class="footer-content">
-            <span><i class="fas fa-microscope"></i> ForensicLens — Digital Image Forensics Toolkit</span>
-            <span class="footer-sep">|</span>
-            <span>Digital Image Processing Lab</span>
-        </div>
-    </footer>
-
-    <!-- Scripts -->
+    <!-- App Scripts -->
     <script src="js/ela.js"></script>
     <script src="js/noise.js"></script>
     <script src="js/copymove.js"></script>
-    <script src="js/metadata.js"></script>
     <script src="js/channels.js"></script>
     <script src="js/edges.js"></script>
+    <script src="js/map-controller.js"></script>
+    <script src="js/scrubber.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

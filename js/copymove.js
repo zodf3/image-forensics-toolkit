@@ -1,178 +1,180 @@
-/**
- * Copy-Move Forgery Detection Module
- * 
- * Detects cloned regions within an image by dividing the image into overlapping blocks,
- * computing feature vectors for each block, sorting them lexicographically, and 
- * matching adjacent blocks in the sorted list that are close in feature space but 
- * distant in spatial space.
- * 
- * Computational Complexity: O(N log N) where N is the number of blocks, dominated by sorting.
- */
+/* ═══════════════════════════════════════════════
+   📐 DIP: COPY-MOVE FORGERY DETECTION
+   Detects cloned regions by extracting block features, sorting, and matching
+   ═══════════════════════════════════════════════ */
 
 window.performCopyMoveDetection = function(sourceCanvas, resultCanvas, options) {
-    // Default options
-    const opt = Object.assign({
-        blockSize: 16,
-        threshold: 8,
-        minDistance: 5
-    }, options);
-
-    const bSize = opt.blockSize;
-    const step = Math.floor(bSize / 2); // 50% overlap
-
-    // Downscale if image is too large to maintain performance
-    const MAX_DIM = 800;
+    const opts = Object.assign({ blockSize: 16, threshold: 8, minDistance: 5 }, options);
+    const ctx = sourceCanvas.getContext('2d', {willReadFrequently: true});
     let width = sourceCanvas.width;
     let height = sourceCanvas.height;
-    let scale = 1.0;
+    
+    // Copy to result canvas
+    resultCanvas.width = width;
+    resultCanvas.height = height;
+    const resCtx = resultCanvas.getContext('2d');
+    resCtx.drawImage(sourceCanvas, 0, 0);
 
-    if (width > MAX_DIM || height > MAX_DIM) {
-        scale = MAX_DIM / Math.max(width, height);
-        width = Math.floor(width * scale);
-        height = Math.floor(height * scale);
-    }
-
-    // Prepare processing canvas
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-    tempCtx.drawImage(sourceCanvas, 0, 0, width, height);
-
-    const imgData = tempCtx.getImageData(0, 0, width, height);
+    const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
 
-    // Convert to grayscale
-    const gray = new Uint8Array(width * height);
-    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
-        // Luminance formula
-        gray[j] = Math.round(data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+    /* ═══════════════════════════════════════════════
+       📐 DIP: GRAYSCALE CONVERSION / LUMINANCE
+       Convert image to grayscale using BT.601: Y = 0.299R + 0.587G + 0.114B
+       ═══════════════════════════════════════════════ */
+    const grayData = new Float32Array(width * height);
+    for (let i = 0; i < data.length; i += 4) {
+        // Luminance calculation
+        grayData[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
     }
 
-    // Function to get pixel value (with edge clamping)
-    const getPixel = (x, y) => {
-        x = Math.max(0, Math.min(x, width - 1));
-        y = Math.max(0, Math.min(y, height - 1));
-        return gray[y * width + x];
-    };
+    /* ═══════════════════════════════════════════════
+       📐 DIP: IMAGE DOWNSAMPLING
+       Downscale if image is large (>800px) for performance
+       ═══════════════════════════════════════════════ */
+    let scale = 1;
+    let procWidth = width;
+    let procHeight = height;
+    let procGray = grayData;
 
+    if (Math.max(width, height) > 800) {
+        scale = 800 / Math.max(width, height);
+        procWidth = Math.floor(width * scale);
+        procHeight = Math.floor(height * scale);
+        procGray = new Float32Array(procWidth * procHeight);
+        
+        // Nearest neighbor downsampling
+        for (let y = 0; y < procHeight; y++) {
+            for (let x = 0; x < procWidth; x++) {
+                const srcX = Math.floor(x / scale);
+                const srcY = Math.floor(y / scale);
+                procGray[y * procWidth + x] = grayData[srcY * width + srcX];
+            }
+        }
+    }
+
+    /* ═══════════════════════════════════════════════
+       📐 DIP: BLOCK DECOMPOSITION
+       Divide into overlapping blocks (step = blockSize/2)
+       ═══════════════════════════════════════════════ */
+    const blockSize = opts.blockSize;
+    const step = Math.floor(blockSize / 2);
     const blocks = [];
 
-    // Extract blocks and compute feature vectors
-    for (let y = 0; y <= height - bSize; y += step) {
-        for (let x = 0; x <= width - bSize; x += step) {
+    for (let y = 0; y <= procHeight - blockSize; y += step) {
+        for (let x = 0; x <= procWidth - blockSize; x += step) {
+            
+            /* ═══════════════════════════════════════════════
+               📐 DIP: FEATURE VECTOR EXTRACTION
+               [mean intensity, standard deviation, horizontal gradient sum, vertical gradient sum]
+               ═══════════════════════════════════════════════ */
             let sum = 0;
             let sumSq = 0;
-            let gradX = 0;
-            let gradY = 0;
-
-            for (let by = 0; by < bSize; by++) {
-                for (let bx = 0; bx < bSize; bx++) {
-                    const px = x + bx;
-                    const py = y + by;
-                    const val = getPixel(px, py);
-                    
+            let hGrad = 0;
+            let vGrad = 0;
+            
+            for (let by = 0; by < blockSize; by++) {
+                for (let bx = 0; bx < blockSize; bx++) {
+                    const idx = (y + by) * procWidth + (x + bx);
+                    const val = procGray[idx];
                     sum += val;
                     sumSq += val * val;
-
-                    // Compute simple gradients
-                    if (bx < bSize - 1) gradX += Math.abs(getPixel(px + 1, py) - val);
-                    if (by < bSize - 1) gradY += Math.abs(getPixel(px, py + 1) - val);
+                    
+                    // Simple pixel difference gradients
+                    if (bx < blockSize - 1) {
+                        hGrad += Math.abs(procGray[idx + 1] - val);
+                    }
+                    if (by < blockSize - 1) {
+                        vGrad += Math.abs(procGray[idx + procWidth] - val);
+                    }
                 }
             }
-
-            const area = bSize * bSize;
-            const mean = sum / area;
-            // Variance = E[X^2] - (E[X])^2
-            const variance = (sumSq / area) - (mean * mean);
-            const stdDev = Math.sqrt(Math.max(0, variance));
-
+            
+            const n = blockSize * blockSize;
+            const mean = sum / n;
+            const variance = (sumSq / n) - (mean * mean);
+            const stdDev = variance > 0 ? Math.sqrt(variance) : 0;
+            
             blocks.push({
                 x, y,
-                features: [mean, stdDev, gradX, gradY]
+                f: [mean, stdDev, hGrad, vGrad]
             });
         }
     }
 
-    // Lexicographical sort based on features
+    /* ═══════════════════════════════════════════════
+       📐 DIP: LEXICOGRAPHIC SORTING / BLOCK MATCHING
+       Sort blocks by feature vectors, compare adjacent sorted blocks.
+       Complexity: O(N log N)
+       ═══════════════════════════════════════════════ */
     blocks.sort((a, b) => {
         for (let i = 0; i < 4; i++) {
-            if (Math.abs(a.features[i] - b.features[i]) > 0.01) {
-                return a.features[i] - b.features[i];
-            }
+            if (a.f[i] !== b.f[i]) return a.f[i] - b.f[i];
         }
         return 0;
     });
 
     const matches = [];
+    const threshold = opts.threshold;
+    const minDistance = opts.minDistance;
 
-    // Compare adjacent sorted blocks
     for (let i = 0; i < blocks.length - 1; i++) {
         const b1 = blocks[i];
-        let j = i + 1;
-        // Check a small window of adjacent blocks
-        while (j < blocks.length && j <= i + 5) {
-            const b2 = blocks[j];
+        const b2 = blocks[i + 1];
+        
+        let featDistSq = 0;
+        for (let j = 0; j < 4; j++) {
+            const diff = b1.f[j] - b2.f[j];
+            featDistSq += diff * diff;
+        }
+        const featDist = Math.sqrt(featDistSq);
+        
+        if (featDist < threshold) {
+            const dx = b1.x - b2.x;
+            const dy = b1.y - b2.y;
+            const spatialDist = Math.sqrt(dx * dx + dy * dy);
             
-            // Calculate feature distance (sum of absolute differences)
-            let featureDist = 0;
-            for (let k = 0; k < 4; k++) {
-                featureDist += Math.abs(b1.features[k] - b2.features[k]);
+            if (spatialDist >= minDistance) {
+                matches.push([b1, b2]);
             }
-            
-            // Average per-channel difference
-            featureDist = featureDist / 4;
-
-            if (featureDist <= opt.threshold) {
-                // Calculate spatial distance
-                const spatialDist = Math.sqrt(
-                    Math.pow((b1.x - b2.x) / step, 2) + 
-                    Math.pow((b1.y - b2.y) / step, 2)
-                );
-
-                if (spatialDist >= opt.minDistance) {
-                    matches.push([b1, b2]);
-                }
-            }
-            j++;
         }
     }
 
-    // Setup result canvas
-    resultCanvas.width = sourceCanvas.width;
-    resultCanvas.height = sourceCanvas.height;
-    const resCtx = resultCanvas.getContext('2d');
+    /* ═══════════════════════════════════════════════
+       📐 DIP: VISUALIZATION / OVERLAY RENDERING
+       Draw original dimmed, highlight matched block pairs with colored rectangles and connecting lines
+       ═══════════════════════════════════════════════ */
+    // Dim the original image
+    resCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    resCtx.fillRect(0, 0, width, height);
+    
+    // Reverse scaling for drawing
+    const drawScale = 1 / scale;
+    const drawBlockSize = blockSize * drawScale;
 
-    // Draw original image dimmed
-    resCtx.globalAlpha = 0.5;
-    resCtx.drawImage(sourceCanvas, 0, 0);
-    resCtx.globalAlpha = 1.0;
-
-    // Draw matches
     resCtx.lineWidth = 2;
-    resCtx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
-    resCtx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-
-    // Scale back up to original size
-    const drawX = (x) => Math.floor(x / scale);
-    const drawY = (y) => Math.floor(y / scale);
-    const drawSize = Math.floor(bSize / scale);
-
-    matches.forEach(match => {
-        const p1 = match[0];
-        const p2 = match[1];
-
-        // Draw rects
-        resCtx.fillRect(drawX(p1.x), drawY(p1.y), drawSize, drawSize);
-        resCtx.strokeRect(drawX(p1.x), drawY(p1.y), drawSize, drawSize);
+    for (const match of matches) {
+        const [b1, b2] = match;
         
-        resCtx.fillRect(drawX(p2.x), drawY(p2.y), drawSize, drawSize);
-        resCtx.strokeRect(drawX(p2.x), drawY(p2.y), drawSize, drawSize);
-
-        // Draw line between centers
+        const x1 = b1.x * drawScale;
+        const y1 = b1.y * drawScale;
+        const x2 = b2.x * drawScale;
+        const y2 = b2.y * drawScale;
+        
+        // Random color for each matched pair
+        const hue = Math.random() * 360;
+        const color = `hsl(${hue}, 100%, 50%)`;
+        
+        resCtx.strokeStyle = color;
+        
+        // Draw matched blocks
+        resCtx.strokeRect(x1, y1, drawBlockSize, drawBlockSize);
+        resCtx.strokeRect(x2, y2, drawBlockSize, drawBlockSize);
+        
+        // Draw connecting line between matched blocks
         resCtx.beginPath();
-        resCtx.moveTo(drawX(p1.x) + drawSize/2, drawY(p1.y) + drawSize/2);
-        resCtx.lineTo(drawX(p2.x) + drawSize/2, drawY(p2.y) + drawSize/2);
+        resCtx.moveTo(x1 + drawBlockSize / 2, y1 + drawBlockSize / 2);
+        resCtx.lineTo(x2 + drawBlockSize / 2, y2 + drawBlockSize / 2);
         resCtx.stroke();
-    });
+    }
 };

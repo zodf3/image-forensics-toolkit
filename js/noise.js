@@ -1,125 +1,134 @@
-/**
- * Noise Analysis
- * 
- * Digital cameras have specific noise patterns. When an image is spliced 
- * from different sources or edited, the noise pattern often becomes inconsistent.
- * 
- * This module extracts the noise pattern by subtracting a blurred version 
- * of the image from the original. A Gaussian blur is used as a low-pass filter, 
- * so subtracting it leaves the high-frequency components (noise).
- */
+/* ═══════════════════════════════════════════════
+   📐 DIP: NOISE ANALYSIS
+   Extracts noise residual by subtracting blurred image from original
+   ═══════════════════════════════════════════════ */
+
 window.performNoiseAnalysis = function(sourceCanvas, resultCanvas, options) {
     const defaultOptions = { radius: 3, amplification: 10, invert: false };
-    const config = Object.assign({}, defaultOptions, options);
-
+    const opt = { ...defaultOptions, ...options };
+    
     const width = sourceCanvas.width;
     const height = sourceCanvas.height;
-
+    
     resultCanvas.width = width;
     resultCanvas.height = height;
 
     const sourceCtx = sourceCanvas.getContext('2d');
     const resultCtx = resultCanvas.getContext('2d');
-    
-    const originalImageData = sourceCtx.getImageData(0, 0, width, height);
-    const origData = originalImageData.data;
-    
-    // Create arrays for blurring
-    const floatData = new Float32Array(width * height * 4);
-    for (let i = 0; i < origData.length; i++) {
-        floatData[i] = origData[i];
-    }
-    
-    const blurredData = new Float32Array(width * height * 4);
+    const originalData = sourceCtx.getImageData(0, 0, width, height);
+    const data = originalData.data;
 
-    // 1. Create 1D Gaussian kernel
-    // Ensure radius is odd
-    const radius = config.radius % 2 === 0 ? config.radius + 1 : config.radius;
-    const halfRadius = Math.floor(radius / 2);
-    const sigma = Math.max(radius / 2, 1);
-    const kernel = new Float32Array(radius);
-    let kernelSum = 0;
+    /* ═══════════════════════════════════════════════
+       📐 DIP: GAUSSIAN KERNEL GENERATION
+       Create a 1D Gaussian kernel of given radius with sigma = radius/2
+       ═══════════════════════════════════════════════ */
+    const radius = opt.radius;
+    const sigma = Math.max(0.1, radius / 2);
+    const kernelSize = radius * 2 + 1;
+    const kernel = new Float32Array(kernelSize);
+    let sum = 0;
     
-    for (let i = 0; i < radius; i++) {
-        const x = i - halfRadius;
-        // Gaussian function
-        const val = Math.exp(-(x * x) / (2 * sigma * sigma));
-        kernel[i] = val;
-        kernelSum += val;
+    for (let i = 0; i < kernelSize; i++) {
+        const x = i - radius;
+        // Gaussian distribution formula
+        kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+        sum += kernel[i];
     }
     // Normalize kernel
-    for (let i = 0; i < radius; i++) {
-        kernel[i] /= kernelSum;
+    for (let i = 0; i < kernelSize; i++) {
+        kernel[i] /= sum;
     }
 
-    // 2. Apply separable Gaussian blur
-    const tempBuffer = new Float32Array(width * height * 4);
+    /* ═══════════════════════════════════════════════
+       📐 DIP: SEPARABLE CONVOLUTION / LOW-PASS FILTERING
+       Apply kernel horizontally then vertically
+       ═══════════════════════════════════════════════ */
+    const tempBuffer = new Float32Array(width * height * 3);
+    const blurredBuffer = new Float32Array(width * height * 3);
 
     // Horizontal pass
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-            let r = 0, g = 0, b = 0, a = 0;
-            for (let k = -halfRadius; k <= halfRadius; k++) {
-                let px = Math.min(Math.max(x + k, 0), width - 1);
-                const offset = (y * width + px) * 4;
-                const weight = kernel[k + halfRadius];
-                r += floatData[offset] * weight;
-                g += floatData[offset + 1] * weight;
-                b += floatData[offset + 2] * weight;
-                a += floatData[offset + 3] * weight;
+            let r = 0, g = 0, b = 0;
+            for (let k = -radius; k <= radius; k++) {
+                let px = x + k;
+                // Clamp to edge
+                if (px < 0) px = 0;
+                if (px >= width) px = width - 1;
+                
+                const weight = kernel[k + radius];
+                const idx = (y * width + px) * 4;
+                r += data[idx] * weight;
+                g += data[idx + 1] * weight;
+                b += data[idx + 2] * weight;
             }
-            const outOffset = (y * width + x) * 4;
-            tempBuffer[outOffset] = r;
-            tempBuffer[outOffset + 1] = g;
-            tempBuffer[outOffset + 2] = b;
-            tempBuffer[outOffset + 3] = a;
+            const outIdx = (y * width + x) * 3;
+            tempBuffer[outIdx] = r;
+            tempBuffer[outIdx + 1] = g;
+            tempBuffer[outIdx + 2] = b;
         }
     }
 
     // Vertical pass
-    for (let x = 0; x < width; x++) {
-        for (let y = 0; y < height; y++) {
-            let r = 0, g = 0, b = 0, a = 0;
-            for (let k = -halfRadius; k <= halfRadius; k++) {
-                let py = Math.min(Math.max(y + k, 0), height - 1);
-                const offset = (py * width + x) * 4;
-                const weight = kernel[k + halfRadius];
-                r += tempBuffer[offset] * weight;
-                g += tempBuffer[offset + 1] * weight;
-                b += tempBuffer[offset + 2] * weight;
-                a += tempBuffer[offset + 3] * weight;
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0;
+            for (let k = -radius; k <= radius; k++) {
+                let py = y + k;
+                // Clamp to edge
+                if (py < 0) py = 0;
+                if (py >= height) py = height - 1;
+                
+                const weight = kernel[k + radius];
+                const idx = (py * width + x) * 3;
+                r += tempBuffer[idx] * weight;
+                g += tempBuffer[idx + 1] * weight;
+                b += tempBuffer[idx + 2] * weight;
             }
-            const outOffset = (y * width + x) * 4;
-            blurredData[outOffset] = r;
-            blurredData[outOffset + 1] = g;
-            blurredData[outOffset + 2] = b;
-            blurredData[outOffset + 3] = a;
+            const outIdx = (y * width + x) * 3;
+            blurredBuffer[outIdx] = r;
+            blurredBuffer[outIdx + 1] = g;
+            blurredBuffer[outIdx + 2] = b;
         }
     }
 
-    // 3. Compute noise residual
-    const resultImageData = resultCtx.createImageData(width, height);
-    const resData = resultImageData.data;
+    const resultData = resultCtx.createImageData(width, height);
+    const outData = resultData.data;
 
-    for (let i = 0; i < origData.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-            // noise = (original - blurred) * amplification + 128
-            let diff = origData[i + c] - blurredData[i + c];
-            let val = diff * config.amplification + 128;
-            
-            // Clamp
-            val = Math.max(0, Math.min(255, val));
-            
-            // Invert if needed
-            if (config.invert) {
-                val = 255 - val;
-            }
-            
-            resData[i + c] = val;
+    for (let i = 0, len = data.length; i < len; i += 4) {
+        const bufIdx = (i / 4) * 3;
+        
+        /* ═══════════════════════════════════════════════
+           📐 DIP: HIGH-PASS FILTERING / NOISE RESIDUAL EXTRACTION
+           noise = (original - blurred) * amplification + 128
+           ═══════════════════════════════════════════════ */
+        let nr = (data[i] - blurredBuffer[bufIdx]) * opt.amplification + 128;
+        let ng = (data[i + 1] - blurredBuffer[bufIdx + 1]) * opt.amplification + 128;
+        let nb = (data[i + 2] - blurredBuffer[bufIdx + 2]) * opt.amplification + 128;
+
+        /* ═══════════════════════════════════════════════
+           📐 DIP: INTENSITY CLAMPING
+           Clamp all values to [0, 255]
+           ═══════════════════════════════════════════════ */
+        nr = Math.min(255, Math.max(0, Math.round(nr)));
+        ng = Math.min(255, Math.max(0, Math.round(ng)));
+        nb = Math.min(255, Math.max(0, Math.round(nb)));
+
+        /* ═══════════════════════════════════════════════
+           📐 DIP: IMAGE INVERSION
+           If invert, invert all pixel values: 255 - value
+           ═══════════════════════════════════════════════ */
+        if (opt.invert) {
+            nr = 255 - nr;
+            ng = 255 - ng;
+            nb = 255 - nb;
         }
-        resData[i + 3] = 255; // Alpha fully opaque
+
+        outData[i] = nr;
+        outData[i + 1] = ng;
+        outData[i + 2] = nb;
+        outData[i + 3] = 255;
     }
 
-    // 4. Draw result
-    resultCtx.putImageData(resultImageData, 0, 0);
+    resultCtx.putImageData(resultData, 0, 0);
 };
