@@ -1,4 +1,4 @@
-# 🔬 ForensicLens
+# 🔬 ForensicLens 
 
 > **Digital Image Forensics & Privacy Guard — 100% Client-Side**
 
