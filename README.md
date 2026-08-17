@@ -1,10 +1,10 @@
-# 🔬 ForensicLens v2
+# 🔬 ForensicLens
 
 > **Digital Image Forensics & Privacy Guard — 100% Client-Side**
 
 ForensicLens v2 is a powerful, browser-based digital image forensics toolkit. It allows users to detect subtle manipulations (like splicing and cloning) using standard Digital Image Processing (DIP) algorithms. It also includes a **Privacy Guard** module to extract hidden EXIF metadata (including GPS telemetry) and securely scrub images before online sharing.
 
-![ForensicLens Dashboard](screenshots/01_upload_screen.png)
+![ForensicLens Dashboard](./screenshots/01_upload_screen.png)
 
 ## ✨ Key Features
 
